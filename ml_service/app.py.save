@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
         run_id = config.default_run_id()
         MODEL.set(run_id=run_id)
         logger.info(f"Model loaded successfully, run_id={run_id}")
-    except Exception as e:
+    except RuntimeError as e:
         logger.warning(f"Could not load model on startup: {e}. Service will start without model.")
     yield
 
@@ -71,7 +71,6 @@ def create_app() -> FastAPI:
     	except Exception as e:
         	raise HTTPException(status_code=503, detail=f"MLflow is unavailable: {e}")
     	return UpdateModelResponse(run_id=run_id)
-    
-    return app
+
 
 app = create_app()
