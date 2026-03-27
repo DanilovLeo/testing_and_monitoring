@@ -19,6 +19,7 @@ from ml_service.schemas import (
     UpdateModelResponse,
 )
 from ml_service import metrics
+from ml_service import drift
 
 MODEL = Model()
 logger = logging.getLogger(__name__)
@@ -45,6 +46,14 @@ async def lifespan(app: FastAPI):
             'feature_names': ','.join(MODEL.features or [])
         })
         metrics.model_last_update_timestamp.set(time.time())
+        # Загружаем reference data для drift мониторинга
+        try:
+            import pandas as pd
+            features = MODEL.features or []
+            ref_df = pd.DataFrame(columns=features)
+            logger.info("Reference data will be collected from first requests")
+        except Exception as drift_e:
+            logger.warning(f"Could not set reference data: {drift_e}")
     except Exception as e:
         logger.warning(f"Could not load model on startup: {e}. Service will start without model.")
     yield
@@ -109,6 +118,8 @@ def create_app() -> FastAPI:
             inference_start = time.time()
             try:
                 probability = model.predict_proba(df)[0][1]
+                # Drift monitoring
+                drift.add_to_buffer(dict(zip(df.columns, df.iloc[0].values)))
             except Exception as e:
                 metrics.http_requests_total.labels(
                     method='POST', endpoint='/predict', status_code='500'
